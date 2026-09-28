@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f8f9fb">
+  <meta name="description" content="Bild zu Text – OCR direkt im Browser, inspiriert von Google Lens.">
+  <title>Lens Text – Bild zu Text</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <style>
+    :root{
+      --bg:#f7f8fb; --panel:#fff; --text:#1f2328; --muted:#6f7580;
+      --line:#e5e7eb; --shadow:0 12px 32px rgba(30,35,45,.08);
+      --accent:#675cff; --accent-2:#3f8cff; --accent-soft:#efedff;
+      --success:#168a5b; --danger:#c13b4a; --radius:24px;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;min-height:100%;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--text);background:var(--bg)}
+    button,input,select,textarea{font:inherit}
+    button{cursor:pointer}
+    .app{max-width:1180px;margin:0 auto;padding:28px 20px 44px}
+    header{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:24px}
+    .brand{display:flex;align-items:center;gap:12px}
+    .logo{width:40px;height:40px;border-radius:13px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:grid;place-items:center;color:#fff;box-shadow:0 8px 18px rgba(103,92,255,.22)}
+    .logo svg{width:22px;height:22px}
+    h1{font-size:20px;line-height:1.1;margin:0;font-weight:760;letter-spacing:-.02em}
+    .sub{font-size:13px;color:var(--muted);margin-top:4px}
+    .status-pill{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:#fff;padding:9px 12px;border-radius:999px;font-size:13px;color:var(--muted)}
+    .dot{width:8px;height:8px;border-radius:50%;background:#c7cbd2}.dot.ready{background:var(--success)}.dot.busy{background:var(--accent);box-shadow:0 0 0 5px rgba(103,92,255,.08)}
+    .workspace{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:stretch}
+    .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);min-height:540px;overflow:hidden}
+    .panel-head{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid var(--line)}
+    .panel-title{font-size:14px;font-weight:700}
+    .panel-meta{font-size:12px;color:var(--muted)}
+    .image-panel{display:flex;flex-direction:column}
+    .dropzone{margin:18px;flex:1;min-height:430px;border:1.5px dashed #cfd3da;border-radius:20px;background:#fbfcfe;display:grid;place-items:center;position:relative;overflow:hidden;transition:.18s ease}
+    .dropzone.active{border-color:var(--accent);background:#f5f3ff;transform:scale(1.003)}
+    .empty{display:flex;flex-direction:column;align-items:center;text-align:center;padding:28px;gap:12px}
+    .empty-icon{width:62px;height:62px;border-radius:20px;background:#f0f1f5;display:grid;place-items:center;color:#555d68}
+    .empty h2{margin:2px 0 0;font-size:18px;letter-spacing:-.01em}.empty p{margin:0;color:var(--muted);font-size:14px;max-width:360px;line-height:1.55}
+    .primary{border:0;background:#222;color:#fff;padding:12px 18px;border-radius:999px;font-weight:650;box-shadow:0 5px 14px rgba(20,24,30,.12)}
+    .secondary{border:1px solid var(--line);background:#fff;color:var(--text);padding:10px 14px;border-radius:999px;font-weight:620}
+    .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .mini-btn{border:1px solid var(--line);background:#fff;border-radius:12px;padding:8px 10px;color:#4a505a;display:inline-flex;align-items:center;gap:7px}
+    .mini-btn:disabled{opacity:.45;cursor:not-allowed}
+    .preview{display:none;position:absolute;inset:0;background:#f4f5f7}
+    .preview img{width:100%;height:100%;object-fit:contain;display:block}
+    .preview-bar{position:absolute;left:12px;right:12px;bottom:12px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+    .glass{background:rgba(255,255,255,.88);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.9);box-shadow:0 6px 18px rgba(20,24,30,.12)}
+    .result-panel{display:flex;flex-direction:column}
+    .result-wrap{padding:18px;display:flex;flex-direction:column;gap:12px;flex:1}
+    textarea{width:100%;flex:1;min-height:360px;resize:none;border:0;outline:none;padding:22px;background:#fbfcfe;border-radius:20px;color:#252933;font-size:15px;line-height:1.7;box-shadow:inset 0 0 0 1px var(--line)}
+    textarea::placeholder{color:#a0a6b0}
+    .result-tools{display:flex;justify-content:space-between;gap:12px;align-items:center}
+    .counter{font-size:12px;color:var(--muted)}
+    .action-row{display:flex;gap:8px;flex-wrap:wrap}
+    .copy{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 8px 18px rgba(103,92,255,.18)}
+    .progress{display:none;padding:0 18px 18px}
+    .progress-top{display:flex;justify-content:space-between;color:var(--muted);font-size:12px;margin-bottom:7px}.progress-bar{height:8px;background:#eceef2;border-radius:999px;overflow:hidden}.progress-fill{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2));transition:width .18s ease}
+    .hint{padding:0 18px 18px;color:var(--muted);font-size:12px;line-height:1.45}
+    .footer{margin-top:14px;display:flex;justify-content:space-between;gap:16px;align-items:center;color:#8a909a;font-size:12px;padding:0 4px}
+    .select{border:1px solid var(--line);background:#fff;border-radius:10px;padding:7px 9px;color:#4a505a}
+    .toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,120px);padding:11px 15px;border-radius:999px;background:#20242b;color:#fff;font-size:13px;box-shadow:0 12px 28px rgba(0,0,0,.18);transition:.22s ease;z-index:10}.toast.show{transform:translate(-50%,0)}
+    input[type=file]{display:none}
+    @media(max-width:820px){.workspace{grid-template-columns:1fr}.panel{min-height:440px}.dropzone{min-height:320px}textarea{min-height:280px}.status-pill{display:none}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="brand">
+        <div class="logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="4" width="14" height="16" rx="3"></rect><path d="M8.5 8h7M8.5 12h7M8.5 16h4"></path></svg>
+        </div>
+        <div><h1>Lens Text</h1><div class="sub">Bild zu Text – schnell, sauber, lokal</div></div>
+      </div>
+      <div class="status-pill"><span class="dot ready" id="statusDot"></span><span id="statusText">Bereit</span></div>
+    </header>
+
+    <main class="workspace">
+      <section class="panel image-panel">
+        <div class="panel-head"><div><div class="panel-title">Bild</div><div class="panel-meta" id="imageMeta">Noch kein Bild ausgewählt</div></div><div class="toolbar"><button class="mini-btn" id="clearBtn" disabled>Leeren</button></div></div>
+        <div class="dropzone" id="dropzone" tabindex="0" aria-label="Bild hier ablegen oder auswählen">
+          <div class="empty" id="emptyState">
+            <div class="empty-icon"><svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 16.5V18a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1.5"></path><path d="M12 3v12"></path><path d="m7.5 7.5 4.5-4.5 4.5 4.5"></path></svg></div>
+            <h2>Bild hierher ziehen</h2>
+            <p>Oder aus Zwischenablage einfügen. JPG, PNG, WEBP und andere gängige Bildformate werden unterstützt.</p>
+            <div class="action-row"><button class="primary" id="pickBtn">Bild auswählen</button><button class="secondary" id="pasteBtn">Einfügen</button></div>
+          </div>
+          <div class="preview" id="preview"><img id="previewImg" alt="Ausgewähltes Bild"><div class="preview-bar"><div class="toolbar"><button class="mini-btn glass" id="zoomOut" disabled>−</button><button class="mini-btn glass" id="zoomReset" disabled>100%</button><button class="mini-btn glass" id="zoomIn" disabled>＋</button></div><button class="mini-btn glass" id="reselect">Neues Bild</button></div></div>
+        </div>
+        <div class="hint">Tipp: Scharfe, gut beleuchtete Bilder liefern die besten OCR-Ergebnisse. Große Texte funktionieren meist besonders zuverlässig.</div>
+      </section>
+
+      <section class="panel result-panel">
+        <div class="panel-head"><div><div class="panel-title">Erkannter Text</div><div class="panel-meta" id="resultMeta">Noch nichts erkannt</div></div><select id="language" class="select" aria-label="OCR-Sprache"><option value="deu">Deutsch</option><option value="eng">English</option><option value="deu+eng">Deutsch + English</option><option value="fra">Français</option><option value="spa">Español</option></select></div>
+        <div class="result-wrap">
+          <textarea id="output" spellcheck="false" placeholder="Der erkannte Text erscheint hier …"></textarea>
+          <div class="result-tools"><div class="counter" id="counter">0 Zeichen · 0 Wörter</div><div class="action-row"><button class="secondary" id="downloadBtn" disabled>TXT speichern</button><button class="primary copy" id="copyBtn" disabled>Text kopieren</button></div></div>
+        </div>
+        <div class="progress" id="progressArea"><div class="progress-top"><span id="progressLabel">OCR wird vorbereitet …</span><span id="progressPct">0 %</span></div><div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div></div>
+      </section>
+    </main>
+
+    <div class="footer"><span>Keine Anmeldung · keine Server-API für die OCR</span><span>Tesseract.js im Browser</span></div>
+  </div>
+  <input id="fileInput" type="file" accept="image/*">
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const els = {
+    dropzone:$('dropzone'), emptyState:$('emptyState'), preview:$('preview'), previewImg:$('previewImg'), fileInput:$('fileInput'),
+    pickBtn:$('pickBtn'), pasteBtn:$('pasteBtn'), reselect:$('reselect'), clearBtn:$('clearBtn'), output:$('output'), copyBtn:$('copyBtn'),
+    downloadBtn:$('downloadBtn'), language:$('language'), progressArea:$('progressArea'), progressFill:$('progressFill'), progressLabel:$('progressLabel'),
+    progressPct:$('progressPct'), counter:$('counter'), imageMeta:$('imageMeta'), resultMeta:$('resultMeta'), toast:$('toast'), statusDot:$('statusDot'), statusText:$('statusText'),
+    zoomIn:$('zoomIn'), zoomOut:$('zoomOut'), zoomReset:$('zoomReset')
+  };
+  let currentFile = null, worker = null, scale = 1, busy = false;
+
+  function toast(msg){ els.toast.textContent = msg; els.toast.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(()=>els.toast.classList.remove('show'),2300); }
+  function setStatus(text, mode='ready'){ els.statusText.textContent = text; els.statusDot.className = 'dot ' + mode; }
+  function updateCounter(){ const t = els.output.value.trim(); const chars=els.output.value.length; const words=t ? t.split(/\s+/).length : 0; els.counter.textContent = `${chars.toLocaleString('de-DE')} Zeichen · ${words.toLocaleString('de-DE')} Wörter`; els.copyBtn.disabled = !els.output.value.trim(); els.downloadBtn.disabled = !els.output.value.trim(); }
+  function clampScale(){ scale=Math.min(2,Math.max(.6,Math.round(scale*10)/10)); els.previewImg.style.transform=`scale(${scale})`; els.zoomReset.textContent=`${Math.round(scale*100)}%`; }
+  function showFile(file){
+    if(!file || !file.type.startsWith('image/')) { toast('Bitte ein Bild auswählen.'); return; }
+    currentFile=file; scale=1; clampScale(); els.previewImg.src=URL.createObjectURL(file); els.emptyState.style.display='none'; els.preview.style.display='block'; els.clearBtn.disabled=false; [els.zoomIn,els.zoomOut,els.zoomReset].forEach(b=>b.disabled=false);
+    els.imageMeta.textContent = `${file.name || 'Bild'} · ${Math.max(1,Math.round(file.size/1024))} KB`; els.output.value=''; updateCounter(); els.resultMeta.textContent='Bereit zur Texterkennung';
+    runOCR(file);
+  }
+  async function runOCR(file){
+    if(busy) return; busy=true; setStatus('OCR läuft …','busy'); els.progressArea.style.display='block'; els.progressFill.style.width='0%'; els.progressPct.textContent='0 %'; els.progressLabel.textContent='OCR wird vorbereitet …';
+    try {
+      const langValue=els.language.value; const langs=langValue.split('+');
+      if(!worker || worker.__lang !== langValue){ if(worker){await worker.terminate();worker=null;} worker=await Tesseract.createWorker(langs, 1, { logger: m => { if(typeof m.progress==='number'){const pct=Math.round(m.progress*100);els.progressFill.style.width=pct+'%';els.progressPct.textContent=pct+' %';} if(m.status) els.progressLabel.textContent = ({'loading tesseract core':'OCR-Engine wird geladen …','loading language traineddata':'Sprachdaten werden geladen …','recognizing text':'Text wird erkannt …','initializing tesseract':'OCR wird initialisiert …'}[m.status] || m.status); } }); worker.__lang=langValue; }
+      const {data} = await worker.recognize(file);
+      const text=(data.text || '').replace(/[ \t]+\n/g,'\n').trim(); els.output.value=text; updateCounter();
+      els.resultMeta.textContent = text ? 'Erkennung abgeschlossen' : 'Kein Text erkannt'; els.progressFill.style.width='100%'; els.progressPct.textContent='100 %';
+      toast(text ? 'Text erfolgreich erkannt.' : 'Kein Text gefunden.'); setStatus(text ? 'Bereit' : 'Kein Text gefunden');
+    } catch(err){ console.error(err); els.resultMeta.textContent='Fehler bei der Erkennung'; toast('Die Texterkennung ist fehlgeschlagen.'); setStatus('Fehler'); }
+    finally { busy=false; setTimeout(()=>els.progressArea.style.display='none',500); }
+  }
+  function clearAll(){ currentFile=null; els.fileInput.value=''; els.previewImg.removeAttribute('src'); els.preview.style.display='none'; els.emptyState.style.display='flex'; els.clearBtn.disabled=true; [els.zoomIn,els.zoomOut,els.zoomReset].forEach(b=>b.disabled=true); els.output.value=''; updateCounter(); els.imageMeta.textContent='Noch kein Bild ausgewählt'; els.resultMeta.textContent='Noch nichts erkannt'; setStatus('Bereit'); }
+
+  els.pickBtn.onclick=()=>els.fileInput.click(); els.reselect.onclick=()=>els.fileInput.click(); els.fileInput.onchange=e=>showFile(e.target.files[0]); els.clearBtn.onclick=clearAll;
+  els.output.addEventListener('input',()=>{ updateCounter(); els.resultMeta.textContent=els.output.value.trim()?'Manuell bearbeitet':'Noch nichts erkannt'; });
+  els.zoomIn.onclick=()=>{scale+=.1;clampScale()}; els.zoomOut.onclick=()=>{scale-=.1;clampScale()}; els.zoomReset.onclick=()=>{scale=1;clampScale()};
+  els.language.onchange=()=>{ if(currentFile && !busy) runOCR(currentFile); };
+  els.dropzone.addEventListener('dragover',e=>{e.preventDefault();els.dropzone.classList.add('active')});
+  els.dropzone.addEventListener('dragleave',()=>els.dropzone.classList.remove('active'));
+  els.dropzone.addEventListener('drop',e=>{e.preventDefault();els.dropzone.classList.remove('active');showFile(e.dataTransfer.files[0])});
+  els.dropzone.addEventListener('keydown',e=>{ if((e.key==='Enter'||e.key===' ') && !currentFile){e.preventDefault();els.fileInput.click();} });
+  document.addEventListener('paste',e=>{ const item=[...(e.clipboardData?.items||[])].find(i=>i.type.startsWith('image/')); if(item){ const file=item.getAsFile(); if(file) showFile(file); } });
+  els.pasteBtn.onclick=async()=>{ try{ const items=await navigator.clipboard.read(); for(const item of items){ const type=item.types.find(t=>t.startsWith('image/')); if(type){ const blob=await item.getType(type); showFile(new File([blob],'clipboard-image.'+(type.split('/')[1]||'png'),{type})); return; } } toast('Kein Bild in der Zwischenablage gefunden.'); }catch{toast('Zwischenablage konnte nicht gelesen werden. Nutze Strg/Cmd+V.');} };
+  els.copyBtn.onclick=async()=>{ try{ await navigator.clipboard.writeText(els.output.value); toast('Text kopiert.'); els.copyBtn.textContent='Kopiert ✓'; setTimeout(()=>els.copyBtn.textContent='Text kopieren',1500); }catch{ els.output.select(); document.execCommand('copy'); toast('Text kopiert.'); } };
+  els.downloadBtn.onclick=()=>{ const blob=new Blob([els.output.value],{type:'text/plain;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='erkannter-text.txt'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),500); };
+  window.addEventListener('beforeunload',()=>{ if(worker) worker.terminate(); });
+  updateCounter();
+})();
+</script>
+</body>
+</html>
